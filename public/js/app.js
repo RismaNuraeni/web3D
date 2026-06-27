@@ -57,9 +57,25 @@ loader.load(
     village.scale.set(1.5, 1.5, 1.5);
     village.position.y = 0;
     scene.add(village);
+
+    // Sembunyikan loader setelah model selesai dimuat
+    const loaderEl = document.getElementById('loader');
+    if (loaderEl) loaderEl.classList.add('hidden');
   },
-  undefined,
-  (err) => console.error(err)
+  (xhr) => {
+    // Update progress bar loading
+    if (xhr.lengthComputable) {
+      const pct = (xhr.loaded / xhr.total * 100).toFixed(0);
+      const bar = document.getElementById('loading-bar');
+      if (bar) bar.style.width = pct + '%';
+    }
+  },
+  (err) => {
+    console.error(err);
+    // Tetap sembunyikan loader walau error, biar halaman tidak stuck
+    const loaderEl = document.getElementById('loader');
+    if (loaderEl) loaderEl.classList.add('hidden');
+  }
 );
 
 // ─── Controls ────────────────────────────────────────────────────────────────
@@ -101,6 +117,8 @@ for (let i = 0; i < 80; i++) {
     Math.random() * 3,
     (Math.random() - 0.5) * 10
   );
+  // Simpan posisi Y awal supaya bobbing tidak naik terus
+  fly.userData.baseY = fly.position.y;
   scene.add(fly);
   fireflies.push(fly);
 }
@@ -121,16 +139,13 @@ window.addEventListener('scroll', () => {
   camera.position.z = 8 + scroll * 0.002;
   camera.position.y = 2 + scroll * 0.0008;
 
-  // Navbar opacity
-  const nav = document.querySelector('nav');
-  nav.style.background = scroll > 80
-    ? 'rgba(255,255,255,0.75)'
-    : 'rgba(255,255,255,0.15)';
+  // Navbar scrolled class
+  document.getElementById('navbar')?.classList.toggle('scrolled', scroll > 80);
 
   // Progress bar
   const total = document.body.scrollHeight - window.innerHeight;
   const progress = (scroll / total) * 100;
-  document.getElementById('progress').style.width = progress + '%';
+  document.getElementById('progress-bar').style.width = progress + '%';
 });
 
 // ─── Smooth Nav Links ────────────────────────────────────────────────────────
@@ -150,6 +165,7 @@ let darkMode = false;
 const btn = document.getElementById('themeBtn');
 btn.addEventListener('click', () => {
   darkMode = !darkMode;
+  document.body.classList.toggle('dark', darkMode);
   if (darkMode) {
     scene.background = new THREE.Color('#07141f');
     ambient.intensity = 0.5;
@@ -162,6 +178,52 @@ btn.addEventListener('click', () => {
     btn.innerHTML = '🌙 Night';
   }
 });
+
+// ─── Hamburger Menu (mobile) ─────────────────────────────────────────────────
+
+const menuBtn = document.getElementById('menuBtn');
+const navLinks = document.getElementById('navLinks');
+menuBtn?.addEventListener('click', () => {
+  const isOpen = navLinks.classList.toggle('open');
+  menuBtn.classList.toggle('open', isOpen);
+  menuBtn.setAttribute('aria-expanded', isOpen);
+});
+
+// Tutup menu kalau klik link
+navLinks?.querySelectorAll('a').forEach((link) => {
+  link.addEventListener('click', () => {
+    navLinks.classList.remove('open');
+    menuBtn?.classList.remove('open');
+    menuBtn?.setAttribute('aria-expanded', 'false');
+  });
+});
+
+// ─── Active Nav Link on Scroll ───────────────────────────────────────────────
+
+const sections = document.querySelectorAll('section[id]');
+const navAnchors = document.querySelectorAll('.nav__links a');
+
+const sectionObserver = new IntersectionObserver((entries) => {
+  entries.forEach((entry) => {
+    if (entry.isIntersecting) {
+      navAnchors.forEach((a) => {
+        a.classList.toggle('active', a.getAttribute('href') === '#' + entry.target.id);
+      });
+    }
+  });
+}, { rootMargin: '-40% 0px -55% 0px' });
+
+sections.forEach((s) => sectionObserver.observe(s));
+
+// ─── Drag Hint (hilang setelah 3 detik atau saat user mulai drag) ─────────────
+
+const dragHint = document.getElementById('drag-hint');
+if (dragHint) {
+  setTimeout(() => dragHint.classList.add('hidden'), 3000);
+  renderer.domElement.addEventListener('pointerdown', () => {
+    dragHint.classList.add('hidden');
+  }, { once: true });
+}
 
 // ─── GSAP Animations ─────────────────────────────────────────────────────────
 
@@ -200,9 +262,9 @@ function animate() {
     if (c.position.x > 8) c.position.x = -8;
   });
 
-  // Firefly bobbing
+  // Firefly bobbing (pakai baseY supaya tidak naik terus)
   fireflies.forEach((f, i) => {
-    f.position.y += Math.sin(elapsed + i) * 0.002;
+    f.position.y = f.userData.baseY + Math.sin(elapsed + i) * 0.3;
   });
 
   // Mouse parallax on camera
